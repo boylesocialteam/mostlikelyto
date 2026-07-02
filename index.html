@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Most Likely To — Party Game</title>
+<style>
+  :root{
+    --bg1:#3a1c71; --bg2:#d76d77; --bg3:#ffaf7b;
+    --panel:rgba(255,255,255,.10); --panel2:rgba(255,255,255,.16);
+    --stroke:rgba(255,255,255,.22); --text:#fff; --muted:rgba(255,255,255,.72);
+    --accent:#ffd166; --good:#06d6a0; --pink:#ef476f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background:linear-gradient(135deg,var(--bg1),var(--bg2),var(--bg3));
+    background-size:200% 200%;animation:grad 18s ease infinite;
+    min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+  }
+  @keyframes grad{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  .wrap{width:100%;max-width:560px;padding:20px 18px 40px;flex:1;display:flex;flex-direction:column}
+  h1{font-size:34px;font-weight:800;letter-spacing:-.5px;margin:8px 0 2px;text-align:center;text-shadow:0 3px 18px rgba(0,0,0,.25)}
+  .sub{text-align:center;color:var(--muted);margin:0 0 18px;font-size:14px}
+  .card{background:var(--panel);border:1px solid var(--stroke);border-radius:22px;padding:20px;backdrop-filter:blur(12px);box-shadow:0 12px 40px rgba(0,0,0,.18)}
+  .screen{display:none;animation:fade .35s ease}
+  .screen.active{display:flex;flex-direction:column;flex:1}
+  @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  button{font-family:inherit;cursor:pointer;border:none;font-weight:700}
+  .btn{background:var(--accent);color:#2b1552;padding:16px;border-radius:16px;font-size:17px;width:100%;box-shadow:0 8px 22px rgba(255,209,102,.35);transition:transform .1s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{background:var(--panel2);color:#fff;box-shadow:none;border:1px solid var(--stroke)}
+  .btn.small{padding:11px;font-size:14px;border-radius:12px}
+  .btn:disabled{opacity:.45;box-shadow:none}
+  .inrow{display:flex;gap:10px;margin-bottom:14px}
+  .inrow input{flex:1;padding:15px;border-radius:14px;border:1px solid var(--stroke);background:rgba(0,0,0,.18);color:#fff;font-size:16px;outline:none}
+  .inrow input::placeholder{color:rgba(255,255,255,.55)}
+  input.code{letter-spacing:6px;text-transform:uppercase;text-align:center;font-weight:800}
+  .plist{display:flex;flex-wrap:wrap;gap:9px;margin:4px 0 8px;min-height:20px}
+  .chip{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--stroke);padding:8px 12px;border-radius:30px;font-weight:700;font-size:15px;animation:pop .25s ease}
+  .chip.off{opacity:.4}
+  @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+  .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;color:#2b1552;font-weight:800;flex:none}
+  .hint{color:var(--muted);font-size:13px;text-align:center;margin:6px 0}
+  .roomcode{font-size:52px;font-weight:800;letter-spacing:10px;text-align:center;margin:6px 0;text-shadow:0 3px 18px rgba(0,0,0,.3)}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:var(--muted)}
+  .pill{background:var(--panel2);border:1px solid var(--stroke);padding:6px 12px;border-radius:20px;font-weight:700}
+  .qcard{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;min-height:150px}
+  .qmeta{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+  .badge{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 10px;border-radius:20px;background:rgba(0,0,0,.22)}
+  .qtext{font-size:29px;font-weight:800;line-height:1.2;letter-spacing:-.5px;text-shadow:0 3px 14px rgba(0,0,0,.22);margin:6px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+  .pbtn{display:flex;align-items:center;gap:10px;padding:13px;border-radius:16px;background:var(--panel2);border:1px solid var(--stroke);color:#fff;font-size:16px;font-weight:700;text-align:left;transition:transform .08s}
+  .pbtn:active{transform:scale(.96)}
+  .pbtn:disabled{opacity:.4}
+  .pbtn.self{outline:2px dashed var(--accent);outline-offset:-4px}
+  .avbig{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#2b1552;font-weight:800;font-size:15px;flex:none}
+  .footer{margin-top:14px;display:flex;gap:10px}
+  .bar{display:flex;align-items:center;gap:12px;margin:9px 0}
+  .bar .lbl{width:96px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;flex:none}
+  .track{flex:1;background:rgba(0,0,0,.22);border-radius:12px;height:30px;overflow:hidden}
+  .fill{height:100%;border-radius:12px;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-weight:800;font-size:14px;color:#2b1552}
+  .winner-tag{text-align:center;font-size:20px;font-weight:800;margin:8px 0 2px}
+  .react{display:flex;gap:10px;justify-content:center;margin-top:14px}
+  .react button{font-size:24px;background:var(--panel2);border:1px solid var(--stroke);border-radius:50%;width:50px;height:50px}
+  .react button:active{transform:scale(1.2)}
+  .score-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;background:var(--panel2);margin-bottom:8px}
+  .score-row .rank{width:26px;font-weight:800;text-align:center;color:var(--accent)}
+  .score-row .nm{flex:1;font-weight:700}
+  .score-row .pts{font-weight:800;font-size:18px}
+  .crown{position:fixed;pointer-events:none;font-size:26px;animation:fall 2.6s linear forwards;z-index:5}
+  @keyframes fall{0%{transform:translateY(-40px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(540deg);opacity:0}}
+  .center{text-align:center}
+  .waitdots:after{content:'';animation:dots 1.4s steps(4,end) infinite}
+  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+  code{background:rgba(0,0,0,.3);padding:2px 6px;border-radius:6px;font-size:13px}
+  .err{color:#ffd7d7;font-size:13px;text-align:center;min-height:18px;margin-top:6px}
+  select{padding:6px 10px;border-radius:10px;background:rgba(0,0,0,.25);color:#fff;border:1px solid var(--stroke);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Most Likely To</h1>
+  <p class="sub">The party game of friendly accusations 🎉</p>
+
+  <!-- SETUP NEEDED -->
+  <section id="setup" class="screen">
+    <div class="card">
+      <h2 style="margin-top:0">⚙️ One-time setup needed</h2>
+      <p style="color:var(--muted);line-height:1.5">This game syncs everyone's phones through a free Firebase database. It looks like <code>firebase-config.js</code> hasn't been filled in yet.</p>
+      <p style="color:var(--muted);line-height:1.5">Open <code>README.md</code> and follow "Set up Firebase" (about 10 minutes, free). Once you paste your project keys and reload, this screen disappears.</p>
+    </div>
+  </section>
+
+  <!-- HOME -->
+  <section id="home" class="screen">
+    <div class="card">
+      <div class="inrow"><input id="nameHome" placeholder="Your name" maxlength="14" autocomplete="off"></div>
+      <button id="hostBtn" class="btn" style="margin-bottom:12px">Host a new game</button>
+      <p class="hint">— or join a friend's game —</p>
+      <div class="inrow">
+        <input id="codeInput" class="code" placeholder="CODE" maxlength="4" autocomplete="off">
+        <button id="joinBtn" class="btn small" style="width:90px">Join</button>
+      </div>
+      <p class="err" id="homeErr"></p>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="screen">
+    <div class="card">
+      <p class="hint" style="margin:0">Share this code (or the page link):</p>
+      <div class="roomcode" id="lobbyCode">----</div>
+      <button id="copyLink" class="btn ghost small" style="margin-bottom:16px">📋 Copy invite link</button>
+      <p class="hint" style="text-align:left;margin-bottom:4px">Players in the room</p>
+      <div id="lobbyPlayers" class="plist"></div>
+      <div id="hostControls" style="display:none">
+        <details style="margin:14px 0">
+          <summary style="cursor:pointer;color:var(--muted);font-weight:700">⚙️ Options</summary>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;color:var(--muted)">
+            <span>Rounds</span><select id="roundSel"></select>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
+            <span>Vote for yourself allowed</span><input type="checkbox" id="selfVote">
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
+            <span>Vibe</span>
+            <select id="presetSel">
+              <option value="">Everything</option>
+              <option value="Funny">😂 Funny</option>
+              <option value="Savage">😈 Savage</option>
+              <option value="Chaotic">🌀 Chaotic</option>
+              <option value="Wholesome">🥰 Wholesome</option>
+              <option value="HighDebate">🔥 High debate</option>
+            </select>
+          </div>
+        </details>
+        <button id="startBtn" class="btn" disabled>Start game</button>
+      </div>
+      <p class="hint" id="waitHost" style="display:none">Waiting for the host to start<span class="waitdots"></span></p>
+      <p class="hint" id="poolInfo"></p>
+    </div>
+    <div class="footer"><button id="leaveBtn" class="btn ghost small">Leave</button></div>
+  </section>
+
+  <!-- VOTE -->
+  <section id="vote" class="screen">
+    <div class="topbar"><span class="pill" id="roundLabel">Round 1</span><span class="pill" id="catLabel"></span></div>
+    <div class="card qcard">
+      <div class="qmeta" id="qmeta"></div>
+      <div class="qtext" id="qtext"></div>
+      <div id="voteArea"></div>
+    </div>
+    <div class="footer" id="hostVoteFooter" style="display:none">
+      <button class="btn ghost small" id="revealNowBtn">Reveal now</button>
+      <button class="btn ghost small" id="skipBtn">Skip</button>
+    </div>
+  </section>
+
+  <!-- REVEAL -->
+  <section id="reveal" class="screen">
+    <div class="topbar"><span class="pill" id="roundLabel2">Round 1</span><span class="pill">Results</span></div>
+    <div class="card">
+      <div class="qtext" id="revealQ" style="font-size:20px;margin-bottom:14px"></div>
+      <div id="bars"></div>
+      <div class="winner-tag" id="winnerTag"></div>
+      <div class="react" id="reactRow">
+        <button data-e="😂">😂</button><button data-e="😳">😳</button>
+        <button data-e="💯">💯</button><button data-e="🫵">🫵</button><button data-e="🔥">🔥</button>
+      </div>
+    </div>
+    <div class="footer" id="hostRevealFooter" style="display:none">
+      <button class="btn" id="nextBtn">Next question →</button>
+    </div>
+    <div class="footer" id="hostEndFooter" style="display:none">
+      <button class="btn ghost small" id="endBtn">End & see scores</button>
+    </div>
+    <p class="hint" id="waitNext" style="display:none">Waiting for the host<span class="waitdots"></span></p>
+  </section>
+
+  <!-- SCORES -->
+  <section id="scores" class="screen">
+    <div class="card">
+      <h2 class="center" style="margin:4px 0 16px">🏆 Final Scores</h2>
+      <div id="scoreList"></div>
+    </div>
+    <div class="footer" id="hostAgainFooter" style="display:none">
+      <button class="btn" id="againBtn">Play again (same crew)</button>
+    </div>
+    <div class="footer"><button id="homeBtn" class="btn ghost small">Back to home</button></div>
+  </section>
+</div>
+
+<script src="questions.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, onDisconnect, remove }
+  from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const show=id=>{$$('.screen').forEach(s=>s.classList.remove('active'));$('#'+id).classList.add('active');window.scrollTo(0,0);};
+const COLORS=["#ffd166","#06d6a0","#ef476f","#4cc9f0","#f78c6b","#c77dff","#80ed99","#ff9770","#90dbf4","#ffc6ff","#a0e8af","#ffb3c1"];
+const initials=n=>(n||'?').trim().slice(0,2).toUpperCase();
+const QUESTIONS = window.QUESTIONS || [];
+const PRESETS={
+  Funny:q=>q.tone==="Funny", Savage:q=>q.tone==="Savage"||q.tone==="Competitive",
+  Chaotic:q=>q.tone==="Chaotic", Wholesome:q=>q.tone==="Wholesome"||q.tone==="Cute",
+  HighDebate:q=>q.deb>=8
+};
+
+if(String(firebaseConfig.apiKey).includes('PASTE')){ show('setup'); }
+else { boot(); }
+
+function boot(){
+  const app=initializeApp(firebaseConfig);
+  const db=getDatabase(app);
+
+  let myId=localStorage.getItem('mlt_id');
+  if(!myId){ myId='p'+Math.random().toString(36).slice(2,10); localStorage.setItem('mlt_id',myId); }
+  $('#nameHome').value=localStorage.getItem('mlt_name')||'';
+
+  let code=null, roomRef=null, unsub=null, state=null;
+  const isHost=()=> state && state.host===myId;
+
+  const rs=$('#roundSel'); [5,10,15,20,30].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n+' rounds';if(n===10)o.selected=true;rs.appendChild(o);});
+
+  const rndCode=()=>{const A='ABCDEFGHJKLMNPQRSTUVWXYZ';return Array.from({length:4},()=>A[Math.floor(Math.random()*A.length)]).join('');};
+  const filtered=preset=> preset&&PRESETS[preset]?QUESTIONS.filter(PRESETS[preset]):QUESTIONS;
+  const player=(name,score,idx)=>({name, color:(idx!=null?idx:0)%COLORS.length, score:score||0, connected:true});
+
+  // ---------- HOST ----------
+  $('#hostBtn').onclick=async()=>{
+    const name=$('#nameHome').value.trim(); if(!name)return err('home','Enter your name first');
+    saveName(name);
+    let c; for(let i=0;i<6;i++){ c=rndCode(); const s=await get(ref(db,'rooms/'+c)); if(!s.exists())break; }
+    code=c;
+    await set(ref(db,'rooms/'+code),{
+      host:myId, phase:'lobby', round:0, maxRounds:10,
+      settings:{selfVote:false,preset:''},
+      question:null, results:null,
+      players:{ [myId]:player(name,0,0) }, votes:null, used:null
+    });
+    enterRoom();
+  };
+
+  // ---------- JOIN ----------
+  $('#joinBtn').onclick=()=>doJoin($('#codeInput').value);
+  $('#codeInput').addEventListener('keydown',e=>{if(e.key==='Enter')doJoin($('#codeInput').value);});
+  async function doJoin(raw){
+    const name=$('#nameHome').value.trim(); if(!name)return err('home','Enter your name first');
+    const c=(raw||'').trim().toUpperCase(); if(c.length!==4)return err('home','Enter a 4-letter code');
+    const snap=await get(ref(db,'rooms/'+c)); if(!snap.exists())return err('home','No room with that code');
+    const rm=snap.val();
+    saveName(name); code=c;
+    const existing=rm.players&&rm.players[myId];
+    const idx=Object.keys(rm.players||{}).length;
+    await update(ref(db,'rooms/'+code+'/players/'+myId), player(name, existing?existing.score:0, existing?existing.color:idx));
+    enterRoom();
+  }
+
+  // ---------- subscription ----------
+  function enterRoom(){
+    roomRef=ref(db,'rooms/'+code);
+    const meConn=ref(db,'rooms/'+code+'/players/'+myId+'/connected');
+    set(meConn,true); onDisconnect(meConn).set(false);
+    if(unsub)unsub();
+    unsub=onValue(roomRef,snap=>{
+      if(!snap.exists()){ alert('The room was closed.'); return goHome(); }
+      state=snap.val(); render();
+    });
+    history.replaceState(null,'','?room='+code);
+  }
+
+  // ---------- render ----------
+  let lastPhase=null;
+  function render(){
+    const players=playerList();
+    if(state.phase==='lobby'){
+      show('lobby');
+      $('#lobbyCode').textContent=code;
+      renderChips('#lobbyPlayers',players);
+      const host=isHost();
+      $('#hostControls').style.display=host?'block':'none';
+      $('#waitHost').style.display=host?'none':'block';
+      $('#poolInfo').textContent=`Question pool: ${filtered(state.settings.preset).length} of ${QUESTIONS.length}`;
+      const enough=players.filter(p=>p.connected).length>=3;
+      $('#startBtn').disabled=!enough;
+      $('#startBtn').textContent=enough?'Start game':'Need 3+ players';
+    }
+    else if(state.phase==='voting'){
+      renderVote(players);
+      if(isHost()){
+        const conn=players.filter(p=>p.connected);
+        const voted=Object.keys(state.votes||{}).length;
+        $('#hostVoteFooter').style.display='flex';
+        if(conn.length>0 && voted>=conn.length){ hostReveal(); }
+      } else $('#hostVoteFooter').style.display='none';
+    }
+    else if(state.phase==='reveal'){ renderReveal(players); }
+    else if(state.phase==='results'){ renderScores(players); }
+    lastPhase=state.phase;
+  }
+
+  const playerList=()=>Object.entries(state.players||{}).map(([id,p])=>({id,...p})).sort((a,b)=>(a.color)-(b.color));
+  const colorOf=p=>COLORS[(p.color||0)%COLORS.length];
+
+  function renderChips(sel,players){
+    const el=$(sel); el.innerHTML='';
+    players.forEach(p=>{
+      const c=document.createElement('div'); c.className='chip'+(p.connected?'':' off');
+      c.innerHTML=`<span class="av" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.id===state.host?' 👑':''}`;
+      el.appendChild(c);
+    });
+  }
+
+  // ---------- host actions ----------
+  $('#startBtn').onclick=()=>{
+    if(!isHost())return;
+    const settings={selfVote:$('#selfVote').checked, preset:$('#presetSel').value};
+    update(roomRef,{settings,maxRounds:+rs.value}).then(()=>hostNext(1,{}));
+  };
+  $('#revealNowBtn').onclick=()=>{ if(isHost())hostReveal(); };
+  $('#skipBtn').onclick=()=>{ if(isHost())hostNext(state.round,state.used||{},true); };
+  $('#nextBtn').onclick=()=>{ if(isHost())hostNext(state.round+1,state.used||{}); };
+  $('#endBtn').onclick=()=>{ if(isHost())update(roomRef,{phase:'results'}); };
+  $('#againBtn').onclick=()=>{ if(isHost())resetGame(); };
+
+  function pickQuestion(used,preset){
+    const pool=filtered(preset);
+    const avail=pool.map(q=>QUESTIONS.indexOf(q)).filter(i=>!used[i]);
+    if(!avail.length)return null;
+    return avail[Math.floor(Math.random()*avail.length)];
+  }
+  function hostNext(round,used,isSkip){
+    if(!isSkip && round>state.maxRounds){ return update(roomRef,{phase:'results'}); }
+    const qi=pickQuestion(used,state.settings.preset);
+    if(qi==null){ return update(roomRef,{phase:'results'}); }
+    const q=QUESTIONS[qi];
+    update(roomRef,{ phase:'voting', round, question:{q:q.q,cat:q.cat,tone:q.tone,deb:q.deb},
+      votes:null, results:null, used:{...used,[qi]:true} });
+  }
+  function hostReveal(){
+    const votes=state.votes||{};
+    const tally={}; Object.values(votes).forEach(t=>tally[t]=(tally[t]||0)+1);
+    const ranked=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]);
+    const results=ranked.map(id=>({id,count:tally[id]}));
+    const updates={phase:'reveal',results};
+    if(ranked.length){
+      const top=tally[ranked[0]]; const winners=ranked.filter(id=>tally[id]===top);
+      winners.forEach(id=>{
+        const cur=(state.players[id]&&state.players[id].score)||0;
+        updates['players/'+id+'/score']=cur+(winners.length===1?2:1);
+      });
+    }
+    update(roomRef,updates);
+  }
+  function resetGame(){
+    const updates={phase:'lobby',round:0,question:null,results:null,votes:null,used:null};
+    Object.keys(state.players).forEach(id=>updates['players/'+id+'/score']=0);
+    update(roomRef,updates);
+  }
+
+  // ---------- vote ----------
+  function renderVote(players){
+    show('vote');
+    const q=state.question||{};
+    $('#roundLabel').textContent=`Round ${state.round}/${state.maxRounds}`;
+    $('#catLabel').textContent=q.cat||'';
+    $('#qmeta').innerHTML=`<span class="badge">${q.tone||''}</span><span class="badge">🔥 ${q.deb||0}/10</span>`;
+    $('#qtext').textContent=q.q||'';
+    const area=$('#voteArea');
+    const iVoted=state.votes&&state.votes[myId];
+    const conn=players.filter(p=>p.connected);
+    const votedCount=Object.keys(state.votes||{}).length;
+    if(iVoted){
+      const tgt=state.players[state.votes[myId]];
+      area.innerHTML=`<p class="hint" style="margin-top:18px">You voted for <b>${tgt?tgt.name:'?'}</b> 🗳️</p>
+        <p class="hint waitdots">${votedCount} of ${conn.length} voted</p>`;
+    } else {
+      let html=`<p class="hint" style="margin-top:6px">Tap who fits best 👇</p><div class="grid">`;
+      players.forEach(p=>{
+        if(p.id===myId && !state.settings.selfVote) return;
+        if(!p.connected) return;
+        html+=`<button class="pbtn${p.id===myId?' self':''}" data-id="${p.id}">
+          <span class="avbig" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.id===myId?' (you)':''}</button>`;
+      });
+      area.innerHTML=html+`</div>`;
+      $$('#voteArea .pbtn').forEach(b=>b.onclick=()=>set(ref(db,'rooms/'+code+'/votes/'+myId),b.dataset.id));
+    }
+  }
+
+  // ---------- reveal ----------
+  function renderReveal(players){
+    show('reveal');
+    const q=state.question||{};
+    $('#roundLabel2').textContent=`Round ${state.round}/${state.maxRounds}`;
+    $('#revealQ').textContent=q.q||'';
+    const results=state.results||[];
+    const total=players.filter(p=>p.connected).length||1;
+    const bars=$('#bars'); bars.innerHTML='';
+    results.forEach(r=>{
+      const p=state.players[r.id]||{name:'?',color:0};
+      const col=COLORS[(p.color||0)%COLORS.length];
+      const pct=Math.round(r.count/total*100);
+      const row=document.createElement('div'); row.className='bar';
+      row.innerHTML=`<div class="lbl"><span class="av" style="background:${col}">${initials(p.name)}</span>${p.name}</div>
+        <div class="track"><div class="fill" style="background:${col}">${r.count}</div></div>`;
+      bars.appendChild(row);
+      requestAnimationFrame(()=>setTimeout(()=>{row.querySelector('.fill').style.width=Math.max(pct,14)+'%';},60));
+    });
+    if(results.length){
+      const top=results[0].count; const winners=results.filter(r=>r.count===top).map(r=>state.players[r.id]?state.players[r.id].name:'?');
+      $('#winnerTag').innerHTML = winners.length===1
+        ? `👑 <b>${winners[0]}</b> takes the round! <span style="color:var(--muted);font-size:14px">(+2)</span>`
+        : `🤝 Tie: <b>${winners.join(' & ')}</b> <span style="color:var(--muted);font-size:14px">(+1 each)</span>`;
+      if(lastPhase!=='reveal')confetti();
+    } else $('#winnerTag').textContent='No votes in — moving on!';
+    const host=isHost();
+    $('#hostRevealFooter').style.display=host?'flex':'none';
+    $('#hostEndFooter').style.display=host?'flex':'none';
+    $('#waitNext').style.display=host?'none':'block';
+  }
+  $('#reactRow').onclick=e=>{ if(e.target.dataset.e)floatEmoji(e.target.dataset.e,e.target); };
+
+  // ---------- scores ----------
+  function renderScores(players){
+    show('scores');
+    const order=[...players].sort((a,b)=>(b.score||0)-(a.score||0));
+    const list=$('#scoreList'); list.innerHTML='';
+    order.forEach((o,r)=>{
+      const row=document.createElement('div'); row.className='score-row';
+      const medal=['🥇','🥈','🥉'][r]||(r+1);
+      row.innerHTML=`<div class="rank">${medal}</div><span class="avbig" style="background:${colorOf(o)}">${initials(o.name)}</span>
+        <div class="nm">${o.name}</div><div class="pts">${o.score||0}</div>`;
+      list.appendChild(row);
+    });
+    $('#hostAgainFooter').style.display=isHost()?'flex':'none';
+    if(lastPhase!=='results')burst();
+  }
+
+  // ---------- leave ----------
+  $('#leaveBtn').onclick=leave;
+  $('#homeBtn').onclick=leave;
+  async function leave(){
+    if(code){
+      await remove(ref(db,'rooms/'+code+'/players/'+myId)).catch(()=>{});
+      const snap=await get(ref(db,'rooms/'+code)).catch(()=>null);
+      if(snap&&snap.exists()){
+        const rm=snap.val();
+        if(rm.host===myId){
+          const others=Object.entries(rm.players||{}).filter(([id,p])=>p.connected);
+          if(others.length)update(ref(db,'rooms/'+code),{host:others[0][0]});
+          else remove(ref(db,'rooms/'+code));
+        }
+      }
+    }
+    goHome();
+  }
+  function goHome(){ if(unsub)unsub(); code=null;state=null; history.replaceState(null,'','./'); show('home'); }
+
+  $('#copyLink').onclick=()=>{
+    const url=location.origin+location.pathname+'?room='+code;
+    navigator.clipboard.writeText(url).then(()=>{$('#copyLink').textContent='✓ Link copied!';setTimeout(()=>$('#copyLink').textContent='📋 Copy invite link',1600);});
+  };
+
+  const urlCode=new URLSearchParams(location.search).get('room');
+  if(urlCode) $('#codeInput').value=urlCode.toUpperCase();
+  show('home');
+
+  function saveName(n){ localStorage.setItem('mlt_name',n); }
+  function err(scr,msg){ $('#'+scr+'Err').textContent=msg; setTimeout(()=>{const e=$('#'+scr+'Err');if(e.textContent===msg)e.textContent='';},2600); }
+
+  function confetti(){for(let i=0;i<18;i++){const s=document.createElement('div');s.className='crown';s.textContent=['🎉','✨','👑','⭐'][i%4];s.style.left=Math.random()*100+'vw';s.style.animationDelay=(Math.random()*.5)+'s';document.body.appendChild(s);setTimeout(()=>s.remove(),3000);}}
+  function burst(){for(let i=0;i<30;i++){const s=document.createElement('div');s.className='crown';s.textContent=['🎊','🏆','🥳','⭐','✨'][i%5];s.style.left=Math.random()*100+'vw';s.style.fontSize=(18+Math.random()*20)+'px';s.style.animationDelay=(Math.random()*.8)+'s';document.body.appendChild(s);setTimeout(()=>s.remove(),3200);}}
+  function floatEmoji(e,btn){const r=btn.getBoundingClientRect();const s=document.createElement('div');s.textContent=e;s.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;font-size:26px;pointer-events:none;transition:all 1s ease;z-index:9`;document.body.appendChild(s);requestAnimationFrame(()=>{s.style.top=(r.top-90)+'px';s.style.opacity='0';s.style.transform='scale(1.8)';});setTimeout(()=>s.remove(),1000);}
+}
+</script>
+</body>
+</html>
