@@ -231,19 +231,32 @@ function boot(){
   const filtered=preset=> preset&&PRESETS[preset]?QUESTIONS.filter(PRESETS[preset]):QUESTIONS;
   const player=(name,score,idx)=>({name, color:(idx!=null?idx:0)%COLORS.length, score:score||0, connected:true});
 
+  // friendly database error text
+  function dbErr(e){
+    const m=String((e&&e.message)||e||'');
+    console.error('[Most Likely To]',e);
+    if(/permission[_ ]denied/i.test(m)) return 'Database blocked it — set your Realtime Database Rules (see README).';
+    if(/database.*url|no database|databaseurl/i.test(m)) return 'Bad databaseURL in firebase-config.js.';
+    return 'Database error: '+m;
+  }
+
   // ---------- HOST ----------
   $('#hostBtn').onclick=async()=>{
     const name=$('#nameHome').value.trim(); if(!name)return err('home','Enter your name first');
     saveName(name);
-    let c; for(let i=0;i<6;i++){ c=rndCode(); const s=await get(ref(db,'rooms/'+c)); if(!s.exists())break; }
-    code=c;
-    await set(ref(db,'rooms/'+code),{
-      host:myId, phase:'lobby', round:0, maxRounds:10,
-      settings:{selfVote:false,preset:''},
-      question:null, results:null,
-      players:{ [myId]:player(name,0,0) }, votes:null, used:null
-    });
-    enterRoom();
+    $('#hostBtn').disabled=true;
+    try{
+      let c; for(let i=0;i<6;i++){ c=rndCode(); const s=await get(ref(db,'rooms/'+c)); if(!s.exists())break; }
+      code=c;
+      await set(ref(db,'rooms/'+code),{
+        host:myId, phase:'lobby', round:0, maxRounds:10,
+        settings:{selfVote:false,preset:''},
+        question:null, results:null,
+        players:{ [myId]:player(name,0,0) }, votes:null, used:null
+      });
+      enterRoom();
+    }catch(e){ err('home',dbErr(e)); }
+    finally{ $('#hostBtn').disabled=false; }
   };
 
   // ---------- JOIN ----------
@@ -252,13 +265,15 @@ function boot(){
   async function doJoin(raw){
     const name=$('#nameHome').value.trim(); if(!name)return err('home','Enter your name first');
     const c=(raw||'').trim().toUpperCase(); if(c.length!==4)return err('home','Enter a 4-letter code');
-    const snap=await get(ref(db,'rooms/'+c)); if(!snap.exists())return err('home','No room with that code');
-    const rm=snap.val();
-    saveName(name); code=c;
-    const existing=rm.players&&rm.players[myId];
-    const idx=Object.keys(rm.players||{}).length;
-    await update(ref(db,'rooms/'+code+'/players/'+myId), player(name, existing?existing.score:0, existing?existing.color:idx));
-    enterRoom();
+    try{
+      const snap=await get(ref(db,'rooms/'+c)); if(!snap.exists())return err('home','No room with that code');
+      const rm=snap.val();
+      saveName(name); code=c;
+      const existing=rm.players&&rm.players[myId];
+      const idx=Object.keys(rm.players||{}).length;
+      await update(ref(db,'rooms/'+code+'/players/'+myId), player(name, existing?existing.score:0, existing?existing.color:idx));
+      enterRoom();
+    }catch(e){ err('home',dbErr(e)); }
   }
 
   // ---------- subscription ----------
