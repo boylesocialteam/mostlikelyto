@@ -158,16 +158,9 @@
             <div style="margin-bottom:8px">Include absent friends 👻 <small style="opacity:.65">(tap to add)</small></div>
             <div id="ghostChips" class="fgrid"></div>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
-            <span>Vibe</span>
-            <select id="presetSel">
-              <option value="">Everything</option>
-              <option value="Funny">😂 Funny</option>
-              <option value="Savage">😈 Savage</option>
-              <option value="Chaotic">🌀 Chaotic</option>
-              <option value="Wholesome">🥰 Wholesome</option>
-              <option value="HighDebate">🔥 High debate</option>
-            </select>
+          <div style="margin-top:10px;color:var(--muted)">
+            <div style="margin-bottom:8px">Vibes <small style="opacity:.65">(tap any; none = everything)</small></div>
+            <div id="vibeChips" class="fgrid"></div>
           </div>
         </details>
         <button id="startBtn" class="btn" disabled>Start game</button>
@@ -283,8 +276,15 @@ function boot(){
   const gc=$('#ghostChips');
   GHOSTS.forEach(nm=>{const b=document.createElement('button');b.className='gchip';b.dataset.name=nm;b.textContent=nm;b.onclick=()=>toggleGhost(nm);gc.appendChild(b);});
 
+  // vibe chips (multi-select; none selected = everything)
+  const VIBES=[["Funny","😂 Funny"],["Savage","😈 Savage"],["Chaotic","🌀 Chaotic"],["Wholesome","🥰 Wholesome"],["HighDebate","🔥 High debate"]];
+  const vc=$('#vibeChips');
+  VIBES.forEach(([k,label])=>{const b=document.createElement('button');b.className='gchip';b.dataset.key=k;b.textContent=label;b.onclick=()=>{b.classList.toggle('on');updatePoolInfo();};vc.appendChild(b);});
+  const selectedVibes=()=>[...document.querySelectorAll('#vibeChips .gchip.on')].map(b=>b.dataset.key);
+  function updatePoolInfo(){const el=$('#poolInfo');if(el)el.textContent=`Question pool: ${filtered(selectedVibes()).length} of ${QUESTIONS.length}`;}
+
   const rndCode=()=>{const A='ABCDEFGHJKLMNPQRSTUVWXYZ';return Array.from({length:4},()=>A[Math.floor(Math.random()*A.length)]).join('');};
-  const filtered=preset=> preset&&PRESETS[preset]?QUESTIONS.filter(PRESETS[preset]):QUESTIONS;
+  const filtered=presets=>(presets&&presets.length)?QUESTIONS.filter(q=>presets.some(p=>PRESETS[p]&&PRESETS[p](q))):QUESTIONS;
   const player=(name,score,idx)=>({name, color:(idx!=null?idx:0)%COLORS.length, score:score||0, connected:true});
 
   // friendly database error text
@@ -306,7 +306,7 @@ function boot(){
       code=c;
       await set(ref(db,'rooms/'+code),{
         host:myId, phase:'lobby', round:0, maxRounds:10,
-        settings:{selfVote:false,preset:'',timerSec:0},
+        settings:{selfVote:false,presets:[],timerSec:0},
         question:null, results:null, deadline:null,
         players:{ [myId]:player(name,0,0) }, votes:null, used:null
       });
@@ -358,7 +358,7 @@ function boot(){
       $('#waitHost').style.display=host?'none':'block';
       stopVoteTimers();
       $$('#ghostChips .gchip').forEach(b=>b.classList.toggle('on', !!(state.players&&state.players['ghost_'+b.dataset.name.toLowerCase()])));
-      $('#poolInfo').textContent=`Question pool: ${filtered(state.settings.preset).length} of ${QUESTIONS.length}`;
+      updatePoolInfo();
       const enough=players.filter(p=>p.connected&&!p.ghost).length>=2;
       $('#startBtn').disabled=!enough;
       $('#startBtn').textContent=enough?'Start game':'Need 2+ players';
@@ -418,7 +418,7 @@ function boot(){
   // ---------- host actions ----------
   $('#startBtn').onclick=()=>{
     if(!isHost())return;
-    const settings={selfVote:$('#selfVote').checked, preset:$('#presetSel').value, timerSec:+$('#timerSel').value};
+    const settings={selfVote:$('#selfVote').checked, presets:selectedVibes(), timerSec:+$('#timerSel').value};
     revealedRound=-1;
     update(roomRef,{settings,maxRounds:+rs.value}).then(()=>hostNext(1,{}));
   };
@@ -437,15 +437,15 @@ function boot(){
     }
   }
 
-  function pickQuestion(used,preset){
-    const pool=filtered(preset);
+  function pickQuestion(used,presets){
+    const pool=filtered(presets);
     const avail=pool.map(q=>QUESTIONS.indexOf(q)).filter(i=>!used[i]);
     if(!avail.length)return null;
     return avail[Math.floor(Math.random()*avail.length)];
   }
   function hostNext(round,used,isSkip){
     if(!isSkip && round>state.maxRounds){ return update(roomRef,{phase:'results'}); }
-    const qi=pickQuestion(used,state.settings.preset);
+    const qi=pickQuestion(used,state.settings.presets);
     if(qi==null){ return update(roomRef,{phase:'results'}); }
     const q=QUESTIONS[qi];
     const timerSec=(state.settings&&state.settings.timerSec)||0;
