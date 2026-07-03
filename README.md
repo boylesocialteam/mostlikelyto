@@ -87,10 +87,16 @@ Test mode lets anyone with your database URL read/write for 30 days. For a priva
         ".read": true,
         ".write": true
       }
+    },
+    "stats": {
+      ".read": true,
+      ".write": true
     }
   }
 }
 ```
+
+The `stats` section is required for the **Group Stats** page (all-time votes, round wins, and answer history). If you tightened your rules earlier to rooms-only, re-paste the block above and Publish, or the stats won't save.
 
 This keeps writes scoped to room data. Note: because it's a client-only game, a technically-minded player could in theory peek at votes in the database before the reveal — for a casual game among friends this isn't a concern, but it's why this is best kept to people you trust. True vote-hiding would need a small server, which this deliberately avoids.
 

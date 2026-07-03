@@ -85,6 +85,14 @@
   .gchip{padding:8px 14px;border-radius:20px;background:var(--panel2);border:1px solid var(--stroke);color:#fff;font-size:14px;font-weight:700;opacity:.5;transition:transform .08s}
   .gchip:active{transform:scale(.94)}
   .gchip.on{opacity:1;background:var(--accent);color:#2b1552}
+  .statgrid{display:flex;gap:10px;flex-wrap:wrap}
+  .statbox{flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--stroke);border-radius:14px;padding:12px;text-align:center}
+  .statbox .big{font-size:26px;font-weight:800;color:var(--accent)}
+  .statbox .lbl2{font-size:12px;color:var(--muted);margin-top:2px}
+  .hist{padding:10px 0;border-bottom:1px solid var(--stroke);font-size:14px}
+  .hist:last-child{border-bottom:none}
+  .hist .q{font-weight:700;margin-bottom:3px}
+  .hist .w{color:var(--muted);font-size:13px}
   select{padding:6px 10px;border-radius:10px;background:rgba(0,0,0,.25);color:#fff;border:1px solid var(--stroke);font-weight:700}
 </style>
 </head>
@@ -113,6 +121,7 @@
       <button id="joinBtn" class="btn ghost">Join game</button>
       <p class="err" id="homeErr"></p>
     </div>
+    <div class="footer"><button id="statsBtn" class="btn ghost small">📊 Group stats &amp; history</button></div>
   </section>
 
   <!-- LOBBY -->
@@ -213,14 +222,31 @@
     <div class="footer" id="hostAgainFooter" style="display:none">
       <button class="btn" id="againBtn">Play again (same crew)</button>
     </div>
-    <div class="footer"><button id="homeBtn" class="btn ghost small">Back to home</button></div>
+    <div class="footer"><button id="statsBtn2" class="btn ghost small">📊 Group stats</button><button id="homeBtn" class="btn ghost small">Back to home</button></div>
+  </section>
+
+  <!-- STATS -->
+  <section id="stats" class="screen">
+    <div class="topbar"><span class="pill">📊 Group Stats — All Time</span><button id="statsClose" class="pill" style="cursor:pointer;color:#fff">✕ Close</button></div>
+    <div class="card">
+      <p class="hint" style="text-align:left;margin:0 0 10px;font-weight:700">🏅 Most voted overall (incl. 👻)</p>
+      <div id="statLeaders"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div id="statSummary"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <p class="hint" style="text-align:left;margin:0 0 10px;font-weight:700">🕑 Recent answers</p>
+      <div id="statHistory"></div>
+    </div>
+    <div class="footer"><button id="statsReset" class="btn ghost small">Reset all stats</button></div>
   </section>
 </div>
 
 <script src="questions.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-import { getDatabase, ref, set, get, update, onValue, onDisconnect, remove }
+import { getDatabase, ref, set, get, update, onValue, onDisconnect, remove, increment }
   from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -393,6 +419,7 @@ function boot(){
   $('#startBtn').onclick=()=>{
     if(!isHost())return;
     const settings={selfVote:$('#selfVote').checked, preset:$('#presetSel').value, timerSec:+$('#timerSel').value};
+    revealedRound=-1;
     update(roomRef,{settings,maxRounds:+rs.value}).then(()=>hostNext(1,{}));
   };
   $('#revealNowBtn').onclick=()=>{ if(isHost())hostReveal(); };
@@ -426,20 +453,53 @@ function boot(){
     update(roomRef,{ phase:'voting', round, question:{q:q.q,cat:q.cat,tone:q.tone,deb:q.deb},
       votes:null, results:null, deadline, used:{...used,[qi]:true} });
   }
+  let revealedRound=-1;   // guard against double-counting a round's stats
   function hostReveal(){
     const votes=state.votes||{};
     const tally={}; Object.values(votes).forEach(t=>tally[t]=(tally[t]||0)+1);
     const ranked=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]);
     const results=ranked.map(id=>({id,count:tally[id]}));
     const updates={phase:'reveal',results};
+    let winners=[];
     if(ranked.length){
-      const top=tally[ranked[0]]; const winners=ranked.filter(id=>tally[id]===top);
+      const top=tally[ranked[0]]; winners=ranked.filter(id=>tally[id]===top);
       winners.forEach(id=>{
         const cur=(state.players[id]&&state.players[id].score)||0;
         updates['players/'+id+'/score']=cur+(winners.length===1?2:1);
       });
     }
     update(roomRef,updates);
+    // ---- persistent group stats (starts counting from first real round) ----
+    if(state.round!==revealedRound){
+      revealedRound=state.round;
+      writeStats(results, winners);
+    }
+  }
+  const nameKey=nm=>'p_'+String(nm||'?').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'p_unknown';
+  function writeStats(results, winnerIds){
+    try{
+      if(!results.length) return;   // nobody voted, nothing to record
+      const su={};
+      results.forEach(r=>{
+        const nm=(state.players[r.id]||{}).name||'?'; const k=nameKey(nm);
+        su['stats/players/'+k+'/name']=nm;
+        su['stats/players/'+k+'/votes']=increment(r.count);
+        su['stats/players/'+k+'/ghost']=!!(state.players[r.id]||{}).ghost;
+      });
+      winnerIds.forEach(id=>{
+        const nm=(state.players[id]||{}).name||'?';
+        su['stats/players/'+nameKey(nm)+'/wins']=increment(1);
+      });
+      su['stats/meta/rounds']=increment(1);
+      su['stats/meta/votes']=increment(results.reduce((s,r)=>s+r.count,0));
+      update(ref(db,'/'),su);
+      const hid=Date.now()+'_'+Math.random().toString(36).slice(2,6);
+      const winNames=winnerIds.map(id=>(state.players[id]||{}).name||'?');
+      set(ref(db,'stats/history/'+hid),{
+        q: state.question?state.question.q:'', ts: Date.now(), winners: winNames,
+        results: results.map(r=>({name:(state.players[r.id]||{}).name||'?', count:r.count, ghost:!!(state.players[r.id]||{}).ghost}))
+      });
+    }catch(e){ console.error('[stats]',e); }
   }
   function resetGame(){
     const updates={phase:'lobby',round:0,question:null,results:null,votes:null,used:null,deadline:null};
@@ -523,6 +583,75 @@ function boot(){
     });
     $('#hostAgainFooter').style.display=isHost()?'flex':'none';
     if(lastPhase!=='results')burst();
+  }
+
+  // ---------- group stats page ----------
+  let statsUnsub=null, cameFrom='home';
+  function openStats(){
+    cameFrom = code ? 'game' : 'home';
+    show('stats');
+    if(statsUnsub)statsUnsub();
+    statsUnsub=onValue(ref(db,'stats'),snap=>renderStats(snap.val()||{}));
+  }
+  function closeStats(){
+    if(statsUnsub){statsUnsub();statsUnsub=null;}
+    if(cameFrom==='game' && state){ render(); } else { show('home'); }
+  }
+  $('#statsBtn').onclick=openStats;
+  $('#statsBtn2').onclick=openStats;
+  $('#statsClose').onclick=closeStats;
+  $('#statsReset').onclick=async()=>{
+    if(!confirm('Wipe ALL group stats and history for everyone? This cannot be undone.'))return;
+    await remove(ref(db,'stats')).catch(e=>alert(dbErr(e)));
+  };
+  function renderStats(data){
+    const players=Object.values(data.players||{});
+    const history=Object.values(data.history||{}).sort((a,b)=>b.ts-a.ts);
+    // leaderboard by votes received
+    const lead=[...players].sort((a,b)=>(b.votes||0)-(a.votes||0));
+    const maxV=Math.max(1,...lead.map(p=>p.votes||0));
+    const L=$('#statLeaders');
+    if(!lead.length){ L.innerHTML='<p class="hint" style="margin:6px 0">No stats yet — play a round and results will start appearing here.</p>'; }
+    else{
+      L.innerHTML='';
+      lead.forEach((p,i)=>{
+        const pct=Math.round((p.votes||0)/maxV*100);
+        const row=document.createElement('div'); row.className='bar';
+        row.innerHTML=`<div class="lbl">${['🥇','🥈','🥉'][i]||'▪️'} ${p.name}${p.ghost?' 👻':''}</div>
+          <div class="track"><div class="fill" style="background:var(--accent)">${p.votes||0}</div></div>`;
+        L.appendChild(row);
+        requestAnimationFrame(()=>setTimeout(()=>{row.querySelector('.fill').style.width=Math.max(pct,12)+'%';},50));
+      });
+    }
+    // summary boxes
+    const totalRounds=(data.meta&&data.meta.rounds)||history.length||0;
+    const totalVotes=(data.meta&&data.meta.votes)||0;
+    const topWinner=[...players].sort((a,b)=>(b.wins||0)-(a.wins||0))[0];
+    let landslide={count:0,name:'',q:''};
+    history.forEach(h=>{ (h.results||[]).forEach(r=>{ if(r.count>landslide.count)landslide={count:r.count,name:r.name,q:h.q}; }); });
+    $('#statSummary').innerHTML=`<div class="statgrid">
+      <div class="statbox"><div class="big">${totalRounds}</div><div class="lbl2">rounds played</div></div>
+      <div class="statbox"><div class="big">${totalVotes}</div><div class="lbl2">votes cast</div></div>
+      <div class="statbox"><div class="big">${players.length}</div><div class="lbl2">people ranked</div></div>
+      </div>
+      <div class="statgrid" style="margin-top:10px">
+      <div class="statbox"><div class="big" style="font-size:18px">${topWinner?topWinner.name+(topWinner.ghost?' 👻':''):'—'}</div><div class="lbl2">most round wins (${topWinner?topWinner.wins||0:0})</div></div>
+      <div class="statbox"><div class="big" style="font-size:18px">${landslide.name||'—'}</div><div class="lbl2">biggest landslide (${landslide.count} votes)</div></div>
+      </div>`;
+    // history
+    const H=$('#statHistory');
+    if(!history.length){ H.innerHTML='<p class="hint" style="margin:6px 0">Nothing yet.</p>'; }
+    else{
+      H.innerHTML='';
+      history.slice(0,60).forEach(h=>{
+        const when=new Date(h.ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+        const win=(h.winners||[]).join(' & ')||'no votes';
+        const top=(h.results&&h.results[0])?h.results[0].count:0;
+        const d=document.createElement('div'); d.className='hist';
+        d.innerHTML=`<div class="q">${h.q||''}</div><div class="w">👑 ${win} · ${top} vote${top===1?'':'s'} · ${when}</div>`;
+        H.appendChild(d);
+      });
+    }
   }
 
   // ---------- leave ----------
