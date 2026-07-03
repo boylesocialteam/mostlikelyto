@@ -77,6 +77,10 @@
   @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
   code{background:rgba(0,0,0,.3);padding:2px 6px;border-radius:6px;font-size:13px}
   .err{color:#ffd7d7;font-size:13px;text-align:center;min-height:18px;margin-top:6px}
+  .divider{display:flex;align-items:center;text-align:center;color:var(--muted);font-size:13px;margin:18px 0}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--stroke)}
+  .divider span{padding:0 12px}
+  #joinBtn{margin-top:2px}
   select{padding:6px 10px;border-radius:10px;background:rgba(0,0,0,.25);color:#fff;border:1px solid var(--stroke);font-weight:700}
 </style>
 </head>
@@ -98,12 +102,11 @@
   <section id="home" class="screen">
     <div class="card">
       <div class="inrow"><input id="nameHome" placeholder="Your name" maxlength="14" autocomplete="off"></div>
-      <button id="hostBtn" class="btn" style="margin-bottom:12px">Host a new game</button>
-      <p class="hint">— or join a friend's game —</p>
-      <div class="inrow">
-        <input id="codeInput" class="code" placeholder="CODE" maxlength="4" autocomplete="off">
-        <button id="joinBtn" class="btn small" style="width:90px">Join</button>
-      </div>
+      <p class="hint" style="text-align:left;margin:2px 0 6px;font-weight:700">Start a new game</p>
+      <button id="hostBtn" class="btn">Host a new game</button>
+      <div class="divider"><span>or join a friend's game</span></div>
+      <div class="inrow"><input id="codeInput" class="code" placeholder="ENTER CODE" maxlength="4" autocomplete="off"></div>
+      <button id="joinBtn" class="btn ghost">Join game</button>
       <p class="err" id="homeErr"></p>
     </div>
   </section>
@@ -124,6 +127,22 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
             <span>Vote for yourself allowed</span><input type="checkbox" id="selfVote">
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
+            <span>Round timer</span>
+            <select id="timerSel">
+              <option value="0">Off</option>
+              <option value="10">10 seconds</option>
+              <option value="15">15 seconds</option>
+              <option value="20">20 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="45">45 seconds</option>
+              <option value="60">60 seconds</option>
+              <option value="90">90 seconds</option>
+            </select>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
+            <span>Include absent friends 👻<br><small style="opacity:.65">James, Jack, Amanvir</small></span><input type="checkbox" id="ghostToggle">
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted)">
             <span>Vibe</span>
@@ -147,7 +166,7 @@
 
   <!-- VOTE -->
   <section id="vote" class="screen">
-    <div class="topbar"><span class="pill" id="roundLabel">Round 1</span><span class="pill" id="catLabel"></span></div>
+    <div class="topbar"><span class="pill" id="roundLabel">Round 1</span><span class="pill" id="timerLabel" style="display:none"></span><span class="pill" id="catLabel"></span></div>
     <div class="card qcard">
       <div class="qmeta" id="qmeta"></div>
       <div class="qtext" id="qtext"></div>
@@ -210,6 +229,8 @@ const PRESETS={
   Chaotic:q=>q.tone==="Chaotic", Wholesome:q=>q.tone==="Wholesome"||q.tone==="Cute",
   HighDebate:q=>q.deb>=8
 };
+// "Ghost players" — absent friends who can be voted for but don't vote themselves.
+const GHOSTS=["James","Jack","Amanvir"];
 
 if(String(firebaseConfig.apiKey).includes('PASTE')){ show('setup'); }
 else { boot(); }
@@ -225,7 +246,7 @@ function boot(){
   let code=null, roomRef=null, unsub=null, state=null;
   const isHost=()=> state && state.host===myId;
 
-  const rs=$('#roundSel'); [5,10,15,20,30].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n+' rounds';if(n===10)o.selected=true;rs.appendChild(o);});
+  const rs=$('#roundSel'); [5,10,15,20,30,50,75,100].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n+' rounds';if(n===10)o.selected=true;rs.appendChild(o);});
 
   const rndCode=()=>{const A='ABCDEFGHJKLMNPQRSTUVWXYZ';return Array.from({length:4},()=>A[Math.floor(Math.random()*A.length)]).join('');};
   const filtered=preset=> preset&&PRESETS[preset]?QUESTIONS.filter(PRESETS[preset]):QUESTIONS;
@@ -250,8 +271,8 @@ function boot(){
       code=c;
       await set(ref(db,'rooms/'+code),{
         host:myId, phase:'lobby', round:0, maxRounds:10,
-        settings:{selfVote:false,preset:''},
-        question:null, results:null,
+        settings:{selfVote:false,preset:'',timerSec:0},
+        question:null, results:null, deadline:null,
         players:{ [myId]:player(name,0,0) }, votes:null, used:null
       });
       enterRoom();
@@ -300,23 +321,51 @@ function boot(){
       const host=isHost();
       $('#hostControls').style.display=host?'block':'none';
       $('#waitHost').style.display=host?'none':'block';
+      stopVoteTimers();
+      $('#ghostToggle').checked=players.some(p=>p.ghost);
       $('#poolInfo').textContent=`Question pool: ${filtered(state.settings.preset).length} of ${QUESTIONS.length}`;
-      const enough=players.filter(p=>p.connected).length>=3;
+      const enough=players.filter(p=>p.connected&&!p.ghost).length>=2;
       $('#startBtn').disabled=!enough;
-      $('#startBtn').textContent=enough?'Start game':'Need 3+ players';
+      $('#startBtn').textContent=enough?'Start game':'Need 2+ players';
     }
     else if(state.phase==='voting'){
       renderVote(players);
+      ensureVoteTimers();
       if(isHost()){
-        const conn=players.filter(p=>p.connected);
+        const conn=players.filter(p=>p.connected&&!p.ghost);
         const voted=Object.keys(state.votes||{}).length;
         $('#hostVoteFooter').style.display='flex';
         if(conn.length>0 && voted>=conn.length){ hostReveal(); }
       } else $('#hostVoteFooter').style.display='none';
     }
-    else if(state.phase==='reveal'){ renderReveal(players); }
-    else if(state.phase==='results'){ renderScores(players); }
+    else if(state.phase==='reveal'){ stopVoteTimers(); renderReveal(players); }
+    else if(state.phase==='results'){ stopVoteTimers(); renderScores(players); }
     lastPhase=state.phase;
+  }
+
+  // round timer: countdown display for everyone + host auto-reveal at deadline
+  let countdownInt=null, hostWatchdog=null, timerDeadline=undefined;
+  function stopVoteTimers(){
+    if(countdownInt){clearInterval(countdownInt);countdownInt=null;}
+    if(hostWatchdog){clearTimeout(hostWatchdog);hostWatchdog=null;}
+    timerDeadline=undefined; $('#timerLabel').style.display='none';
+  }
+  function ensureVoteTimers(){
+    const dl=state.deadline||null;
+    if(dl===timerDeadline) return;            // already set up for this round
+    if(countdownInt){clearInterval(countdownInt);countdownInt=null;}
+    if(hostWatchdog){clearTimeout(hostWatchdog);hostWatchdog=null;}
+    timerDeadline=dl;
+    if(!dl){ $('#timerLabel').style.display='none'; return; }
+    const paint=()=>{
+      const rem=Math.max(0,Math.ceil((dl-Date.now())/1000));
+      const el=$('#timerLabel'); el.style.display='inline-block';
+      el.textContent='⏱ '+rem+'s'; el.style.color = rem<=5 ? '#ffd7d7' : '';
+    };
+    paint(); countdownInt=setInterval(paint,250);
+    if(isHost()){
+      hostWatchdog=setTimeout(()=>{ if(state&&state.phase==='voting')hostReveal(); }, Math.max(0,dl-Date.now())+200);
+    }
   }
 
   const playerList=()=>Object.entries(state.players||{}).map(([id,p])=>({id,...p})).sort((a,b)=>(a.color)-(b.color));
@@ -326,7 +375,7 @@ function boot(){
     const el=$(sel); el.innerHTML='';
     players.forEach(p=>{
       const c=document.createElement('div'); c.className='chip'+(p.connected?'':' off');
-      c.innerHTML=`<span class="av" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.id===state.host?' 👑':''}`;
+      c.innerHTML=`<span class="av" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.ghost?' 👻':''}${p.id===state.host?' 👑':''}`;
       el.appendChild(c);
     });
   }
@@ -334,7 +383,7 @@ function boot(){
   // ---------- host actions ----------
   $('#startBtn').onclick=()=>{
     if(!isHost())return;
-    const settings={selfVote:$('#selfVote').checked, preset:$('#presetSel').value};
+    const settings={selfVote:$('#selfVote').checked, preset:$('#presetSel').value, timerSec:+$('#timerSel').value};
     update(roomRef,{settings,maxRounds:+rs.value}).then(()=>hostNext(1,{}));
   };
   $('#revealNowBtn').onclick=()=>{ if(isHost())hostReveal(); };
@@ -342,6 +391,17 @@ function boot(){
   $('#nextBtn').onclick=()=>{ if(isHost())hostNext(state.round+1,state.used||{}); };
   $('#endBtn').onclick=()=>{ if(isHost())update(roomRef,{phase:'results'}); };
   $('#againBtn').onclick=()=>{ if(isHost())resetGame(); };
+  $('#ghostToggle').onchange=()=>{
+    if(!isHost())return;
+    const on=$('#ghostToggle').checked;
+    const base=Object.values(state.players||{}).filter(p=>!p.ghost).length;
+    const updates={};
+    GHOSTS.forEach((nm,i)=>{
+      const id='ghost_'+nm.toLowerCase();
+      updates['players/'+id]= on ? {name:nm,color:(base+i)%COLORS.length,score:0,connected:true,ghost:true} : null;
+    });
+    update(roomRef,updates);
+  };
 
   function pickQuestion(used,preset){
     const pool=filtered(preset);
@@ -354,8 +414,10 @@ function boot(){
     const qi=pickQuestion(used,state.settings.preset);
     if(qi==null){ return update(roomRef,{phase:'results'}); }
     const q=QUESTIONS[qi];
+    const timerSec=(state.settings&&state.settings.timerSec)||0;
+    const deadline= timerSec>0 ? Date.now()+timerSec*1000 : null;
     update(roomRef,{ phase:'voting', round, question:{q:q.q,cat:q.cat,tone:q.tone,deb:q.deb},
-      votes:null, results:null, used:{...used,[qi]:true} });
+      votes:null, results:null, deadline, used:{...used,[qi]:true} });
   }
   function hostReveal(){
     const votes=state.votes||{};
@@ -373,7 +435,7 @@ function boot(){
     update(roomRef,updates);
   }
   function resetGame(){
-    const updates={phase:'lobby',round:0,question:null,results:null,votes:null,used:null};
+    const updates={phase:'lobby',round:0,question:null,results:null,votes:null,used:null,deadline:null};
     Object.keys(state.players).forEach(id=>updates['players/'+id+'/score']=0);
     update(roomRef,updates);
   }
@@ -388,7 +450,7 @@ function boot(){
     $('#qtext').textContent=q.q||'';
     const area=$('#voteArea');
     const iVoted=state.votes&&state.votes[myId];
-    const conn=players.filter(p=>p.connected);
+    const conn=players.filter(p=>p.connected&&!p.ghost);
     const votedCount=Object.keys(state.votes||{}).length;
     if(iVoted){
       const tgt=state.players[state.votes[myId]];
@@ -400,7 +462,7 @@ function boot(){
         if(p.id===myId && !state.settings.selfVote) return;
         if(!p.connected) return;
         html+=`<button class="pbtn${p.id===myId?' self':''}" data-id="${p.id}">
-          <span class="avbig" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.id===myId?' (you)':''}</button>`;
+          <span class="avbig" style="background:${colorOf(p)}">${initials(p.name)}</span>${p.name}${p.ghost?' 👻':(p.id===myId?' (you)':'')}</button>`;
       });
       area.innerHTML=html+`</div>`;
       $$('#voteArea .pbtn').forEach(b=>b.onclick=()=>set(ref(db,'rooms/'+code+'/votes/'+myId),b.dataset.id));
@@ -414,14 +476,14 @@ function boot(){
     $('#roundLabel2').textContent=`Round ${state.round}/${state.maxRounds}`;
     $('#revealQ').textContent=q.q||'';
     const results=state.results||[];
-    const total=players.filter(p=>p.connected).length||1;
+    const total=results.reduce((s,r)=>s+r.count,0)||1;
     const bars=$('#bars'); bars.innerHTML='';
     results.forEach(r=>{
       const p=state.players[r.id]||{name:'?',color:0};
       const col=COLORS[(p.color||0)%COLORS.length];
       const pct=Math.round(r.count/total*100);
       const row=document.createElement('div'); row.className='bar';
-      row.innerHTML=`<div class="lbl"><span class="av" style="background:${col}">${initials(p.name)}</span>${p.name}</div>
+      row.innerHTML=`<div class="lbl"><span class="av" style="background:${col}">${initials(p.name)}</span>${p.name}${p.ghost?' 👻':''}</div>
         <div class="track"><div class="fill" style="background:${col}">${r.count}</div></div>`;
       bars.appendChild(row);
       requestAnimationFrame(()=>setTimeout(()=>{row.querySelector('.fill').style.width=Math.max(pct,14)+'%';},60));
@@ -449,7 +511,7 @@ function boot(){
       const row=document.createElement('div'); row.className='score-row';
       const medal=['🥇','🥈','🥉'][r]||(r+1);
       row.innerHTML=`<div class="rank">${medal}</div><span class="avbig" style="background:${colorOf(o)}">${initials(o.name)}</span>
-        <div class="nm">${o.name}</div><div class="pts">${o.score||0}</div>`;
+        <div class="nm">${o.name}${o.ghost?' 👻':''}</div><div class="pts">${o.score||0}</div>`;
       list.appendChild(row);
     });
     $('#hostAgainFooter').style.display=isHost()?'flex':'none';
@@ -466,7 +528,7 @@ function boot(){
       if(snap&&snap.exists()){
         const rm=snap.val();
         if(rm.host===myId){
-          const others=Object.entries(rm.players||{}).filter(([id,p])=>p.connected);
+          const others=Object.entries(rm.players||{}).filter(([id,p])=>p.connected&&!p.ghost);
           if(others.length)update(ref(db,'rooms/'+code),{host:others[0][0]});
           else remove(ref(db,'rooms/'+code));
         }
