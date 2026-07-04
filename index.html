@@ -571,8 +571,10 @@ function boot(){
       if(lastPhase!=='reveal')confetti();
     } else $('#winnerTag').textContent='No votes in — moving on!';
     const host=isHost();
+    const lastRound = state.round>=state.maxRounds;
+    $('#nextBtn').textContent = lastRound ? '🏆 Final leaderboard →' : 'Next question →';
     $('#hostRevealFooter').style.display=host?'flex':'none';
-    $('#hostEndFooter').style.display=host?'flex':'none';
+    $('#hostEndFooter').style.display=(host && !lastRound)?'flex':'none';   // redundant on last round
     $('#waitNext').style.display=host?'none':'block';
   }
   $('#reactRow').onclick=e=>{ if(e.target.dataset.e)floatEmoji(e.target.dataset.e,e.target); };
