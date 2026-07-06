@@ -257,7 +257,8 @@ const PRESETS={
   Chaotic:q=>q.tone==="Chaotic", Wholesome:q=>q.tone==="Wholesome"||q.tone==="Cute",
   HighDebate:q=>q.deb>=8,
   Rude:q=>q.cat==="Rude",
-  Politics:q=>q.cat==="Politics"
+  Politics:q=>q.cat==="Politics",
+  Work:q=>q.cat==="Work"
 };
 // "Ghost players" — absent friends who can be voted for but don't vote themselves.
 const GHOSTS=["James","Jack","Amanvir","Will","Safi","Adele"];
@@ -283,7 +284,7 @@ function boot(){
   GHOSTS.forEach(nm=>{const b=document.createElement('button');b.className='gchip';b.dataset.name=nm;b.textContent=nm;b.onclick=()=>toggleGhost(nm);gc.appendChild(b);});
 
   // vibe chips (multi-select; none selected = everything)
-  const VIBES=[["Funny","😂 Funny"],["Savage","😈 Savage"],["Chaotic","🌀 Chaotic"],["Wholesome","🥰 Wholesome"],["HighDebate","🔥 High debate"],["Rude","😳 Rude (18+)"],["Politics","🗳️ Politics"]];
+  const VIBES=[["Funny","😂 Funny"],["Savage","😈 Savage"],["Chaotic","🌀 Chaotic"],["Wholesome","🥰 Wholesome"],["HighDebate","🔥 High debate"],["Work","💼 Work"],["Rude","😳 Rude (18+)"],["Politics","🗳️ Politics"]];
   const vc=$('#vibeChips');
   VIBES.forEach(([k,label])=>{const b=document.createElement('button');b.className='gchip';b.dataset.key=k;b.textContent=label;b.onclick=()=>{b.classList.toggle('on');updatePoolInfo();};vc.appendChild(b);});
   const selectedVibes=()=>[...document.querySelectorAll('#vibeChips .gchip.on')].map(b=>b.dataset.key);
